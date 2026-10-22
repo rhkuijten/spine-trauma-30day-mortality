@@ -1,0 +1,7 @@
+tracking_uri: mlruns          # local directory; change to a remote URI if needed
+experiment_name: spine-trauma-survival
+artifact_location: outputs/mlflow-artifacts
+
+tags:
+  project: spine-trauma
+  task: 30d-survival

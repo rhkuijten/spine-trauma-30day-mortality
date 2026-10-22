@@ -1,0 +1,229 @@
+# patient.yaml — Spinal Trauma Survival Model
+# Schema for 30-day survival prediction after spinal trauma consult
+# All columns are as they appear in the raw SPSS dataset
+# Sentinel values 888 / 999 (not found / not filled in) must be treated as missing before validation
+#
+# Survival target
+# D30_MORTALITY (1 = died, 0 = censored)
+
+columns:
+
+  # ── Identifiers ────────────────────────────────────────────────────────────
+  ID:
+    role: id
+    dtype: float
+    nullable: false
+
+  # ── Target: ──────────────────────────────────────────────
+  D30_Mortality:
+    role: evaluation_label        # ground truth for 30-day metric; compare vs S(t=30)
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  # ── Patient demographics ────────────────────────────────────────────────────
+  LEEFTIJD_EXACT:
+    role: predictor
+    dtype: float
+    min: 18.0
+    max: 120.0
+    nullable: false
+
+  Geslacht01: 
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]   # 0 = male, 1 = female (verified against MAN_VROUW; EDA 2g)
+    nullable: true
+
+  BMI:
+    role: predictor
+    dtype: float
+    min: 10.0
+    max: 80.0
+    nullable: true
+
+  # ── Comorbidity ─────────────────────────────────────────────────────────────
+  MFI5:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1, 2, 3, 4, 5]
+    nullable: true
+
+  # HT_CODE: dropped after univariate analysis
+  #  role: predictor
+  #  dtype: int
+  #  allowed_values: [0, 1]   # 0 = no, 1 = yes
+  #  nullable: true
+
+  CHF_CODE:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  COPD_CODE:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  DM_CODE:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  DEPENDENT_CODE:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  COMORB:
+    role: predictor
+    dtype: int
+    allowed_values: [1, 2, 3, 4, 5]
+    # sentinels 888/999 → missing before validation
+    nullable: true
+
+  # ── Injury severity (ISS) ─────────────────────────────────────────────
+  ISS08:
+    role: predictor
+    dtype: float
+    min: 0.0
+    max: 75.0
+    nullable: true
+
+  # ── Spinal cord injury ───────────────────────────────────────────────────────
+  ASIA:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1, 2, 3, 4, 5]
+    # 0=not determinable, 1=A(complete), 2=B, 3=C, 4=D, 5=E(normal)
+    # 0 and sentinel 888 (n=118) mean the exam could not be performed; these rows are
+    # flagged as NEURO_NOT_EXAMINABLE and ASIA is pinned to 5. See config/pipeline.yaml.
+    nullable: true
+
+  # Derived in Cleaner, not present in the raw .sav.
+  NEURO_NOT_EXAMINABLE:
+    role: derived_predictor
+    dtype: int
+    allowed_values: [0, 1]   # 1 = ASIA unrecorded (exam not performable)
+    nullable: false
+
+  SCI_yes_no:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]   # 0 = no SCI, 1 = yes SCI
+    nullable: true
+
+  N_CODE:
+    role: excluded
+    dtype: int
+    allowed_values: [0, 1, 2, 3, 4, 5, 6]
+    # 1=N0, 2=N1, 3=N2, 4=N3, 5=N4, 6=NX. Value 0 is undocumented and occurs in
+    # every 2019-2020 record and no other (n=423): the AO N-modifier was not
+    # collected in that period, so 0 means "not recorded", not a severity level.
+    # Excluded: Spearman -0.93 with ASIA over N0-N4, and its only unique signal
+    # (NX) is now carried by NEURO_NOT_EXAMINABLE.
+    nullable: true
+
+  # ── Fracture characteristics ─────────────────────────────────────────────────
+  NUMBER_OF_FRACTURES:
+    role: predictor
+    dtype: float
+    min: 0.0          # 56 patients (3.8%) have 0: consulted, no fracture classified. See EDA 6e.
+    max: 18.0
+    nullable: true
+
+  AMOUNT_OF_LEVELS_INJURED:
+    role: predictor
+    dtype: float
+    min: 1.0
+    nullable: true
+
+  TYPE_A_INJURY:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  TYPE_B_INJURY:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  TYPE_C_INJURY:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  TYPE_F_INJURY:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]
+    nullable: true
+
+  # ── Spinal region (CTLS) ────────────────────────────────────────────────────
+  C:
+    role: predictor
+    dtype: object
+    allowed_values: ['JA', 'NEE']   # cervical injury
+    nullable: true
+
+  T:
+    role: predictor
+    dtype: object
+    allowed_values: ['JA', 'NEE']   # thoracic injury
+    nullable: true
+
+  L:
+    role: predictor
+    dtype: object
+    allowed_values: ['JA', 'NEE']   # lumbar injury
+    nullable: true
+
+  S:
+    role: predictor
+    dtype: object
+    allowed_values: ['JA', 'NEE']   # sacral injury
+    nullable: true
+
+  # ── Injury mechanism ─────────────────────────────────────────────────────────
+  INTENTIE:
+    role: predictor
+    dtype: int
+    allowed_values: [1, 2, 3, 4, 5, 6, 7, 8, 9,
+                     10, 11, 12, 13, 14, 15, 18]
+    # sentinels 888/999 → missing before validation
+    nullable: true
+
+  # ── TBI ──────────────────────────────────────────────────────────────────────
+  TBI_CT:
+    role: predictor
+    dtype: int
+    allowed_values: [0, 1]   # 0 = no intracranial finding, 1 = yes
+    nullable: true
+
+# ── Excluded columns (with reason) ──────────────────────────────────────────
+# BEHANDELINGYN        leakage — treatment decided within 30-day window
+# OPNAME_DUUR          leakage — post-admission outcome
+# DAGEN_OPNAME         leakage
+# OVERPLAATS_BESTEMMING leakage
+# ONTSLAG_BESTEMMING   leakage
+# COMPLICATIE_YN       leakage
+# follow_up_30d        superseded — survival time now computed from DATUM_ONGEVAL/DATUM_OVERLEDEN
+# follow_up_1yr        superseded — same reason; censoring handled via Y1_MORTALITY
+# FOLLOW_UP            superseded — same reason
+# ASA / ASAcat / FrailtyCat   excluded — ASA has 390 missing (COMORB used instead); FrailtyCat derived from MFI5
+# OORZAAKCATEGORIEID  excluded — INTENTIE is more granular and relevant
+# SENIOR / JUNIOR / Leeftijdcat*   derived from LEEFTIJD_EXACT
+# C0_YN … S_YN        redundant with region-level C/T/L/S
+# C0 … S_A            free-text AO codes, too granular
+# ErgsteAO / M / PTBletsel / INJURY_CODE / VAR00002   unclear / free-text
+# IN_LEVEN / Levend / D30_01 / IN_LEVEN0_1 / Mortality_*   redundant outcome encodings
+# Jaar / MAAND / DAG_MAAND / DAG_VAN_DE_WEEK / DATUM_CONTROLE_PT   admin dates
+# filter_$             SPSS filter artifact
+# TBI_totaal: any symptomps at presentation (loss of conciousness, amnesia or confusion). Dropped, used CT instead

@@ -1,0 +1,248 @@
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  schema_file: data/schemas/patient.yaml
+
+target:
+  event_col: D30_Mortality   # 1 = died within 30 days, 0 = survived
+  duration_col: days_to_event
+
+cross_validation:
+  n_folds: 5
+  stratified: true
+
+bootstrap:
+  n_iterations: 1000
+  random_seed: 42
+  n_jobs: -1          # parallel workers for bootstrap loop (-1 = all cores)
+
+grid_search:
+  # Log-spaced 1e-3 to 1e2 in 21 steps (ratio ~1.78). The previous decade grid left a
+  # 100x gap on either side of the selected value.
+  C: [0.001,   0.00178, 0.00316, 0.00562,
+      0.01,    0.01778, 0.03162, 0.05623,
+      0.1,     0.17783, 0.31623, 0.56234,
+      1.0,     1.77828, 3.16228, 5.62341,
+      10.0,   17.7828, 31.6228, 56.2341,
+      100.0]
+  l1_ratio: [0]          # ridge (L2) only
+  cv_folds: 5
+  scoring: neg_log_loss
+  n_jobs: -1
+
+imputation:
+  strategy: iterative         # sklearn IterativeImputer with BayesianRidge (default)
+  max_iter: 10
+  random_seed: 42
+
+cleaning:
+  sentinels: [888, 999]
+  # ASIA 0 ("not determinable") and 888 both mark a neurological exam that could not
+  # be performed (intubated / sedated / severe TBI). This state is strongly prognostic
+  # (30-day mortality 80.5% vs 7.5%), so it is captured as the NEURO_NOT_EXAMINABLE
+  # indicator before sentinel handling instead of being imputed away. ASIA itself is
+  # pinned to fill_value for these rows; the indicator carries the signal.
+  neuro_not_examinable:
+    source_col: ASIA
+    unrecorded_values: [0, 888]
+    fill_value: 5          # modal recorded grade (E, normal); arbitrary but fixed
+  # MFI5 grades 4 and 5 together hold fewer than 10 patients, too few to estimate a
+  # level from, and their observed mortality is noise. Collapsing to 3+ leaves 25
+  # patients in the top grade and a monotone gradient: 12.2 / 16.2 / 19.2 / 28.0%.
+  # See EDA section 6d.
+  #
+  # NUMBER_OF_FRACTURES runs 0-18 but 93% of patients have <= 6 and the top four
+  # values each hold fewer than 5 patients. Capping at 6+ leaves 156 patients in the top
+  # level and cuts the extreme from 6.41 SD of leverage to 2.04 SD — tighter than
+  # the Yeo-Johnson transform it replaces (2.75 SD) at identical fit. See EDA 6e.
+  ordinal_caps:
+    MFI5: 3
+    NUMBER_OF_FRACTURES: 6
+  binary_map:
+    cols: [C, T, L, S]
+    map: {JA: 1, NEE: 0}
+  # Blank, sentinel and unmapped INTENTIE codes become this level instead of NaN.
+  # INTENTIE is nominal, so there is no scale on which a missing mechanism could be
+  # imputed; giving it a dummy lets the model estimate the effect of "not recorded"
+  # (n=4) rather than assigning those patients to a mechanism they may not have had.
+  intentie_unknown: unknown
+  intentie_map:
+    1: MVA
+    2: MVA
+    3: MVA
+    4: OVA
+    5: OVA
+    6: OVA
+    7: violence
+    8: violence
+    9: violence
+    10: fall_low
+    11: fall_high
+    12: other
+    13: other
+    14: other
+    15: other
+    18: other
+
+features:
+  # "continuous" means Yeo-Johnson + one linear term, not a claim about measurement
+  # scale. NUMBER_OF_FRACTURES is a count and sits under "ordinal" instead: that
+  # skips the transform, keeps imputed values whole, and makes exp(beta) a genuine
+  # odds ratio per additional fracture rather than per SD of a transformed count.
+  continuous:  [LEEFTIJD_EXACT, BMI, ISS08]
+  # Predictors expanded into a restricted cubic spline basis instead of being
+  # Yeo-Johnson transformed (the two are mutually exclusive — see Transformer).
+  # Age is flat to ~45 then climbs steeply (12% at 64, 25% at 76, 36% at 83); a
+  # monotone power transform cannot reproduce that turn, and a linear term is
+  # rejected at LR chi2 = 27.0 on 1 df with AIC 690.7 -> 667.7. Three knots at the
+  # 10th/50th/90th percentiles cost 1 extra parameter and capture essentially all
+  # of the gain a 4-knot fit gives (AIC 673.5 vs 674.1 in the EDA pilot). Knot
+  # quantiles are fixed a priori rather than chosen by fit. See EDA section 11c.
+  spline:
+    LEEFTIJD_EXACT:
+      knot_quantiles: [0.10, 0.50, 0.90]
+      # A spline has no single odds ratio, so the effect is reported as a curve
+      # against this reference age, plus the point estimates listed below.
+      reference: 50
+      report_at: [30, 40, 50, 60, 70, 80, 90]
+  binary:      [Geslacht01, TBI_CT, TYPE_A_INJURY, TYPE_B_INJURY,
+                TYPE_C_INJURY, TYPE_F_INJURY, C, T, L, S,
+                NEURO_NOT_EXAMINABLE]
+  ordinal:     [COMORB, ASIA, MFI5, NUMBER_OF_FRACTURES]
+  categorical: [INTENTIE_cat]
+  # N_CODE dropped: Spearman -0.93 with ASIA (same construct), and the AO N-modifier
+  # was not collected in accident years 2019-2020 (423/1486 rows carry an
+  # out-of-schema 0). Its only unique signal was NX, now NEURO_NOT_EXAMINABLE.
+  # HT/CHF/COPD/DM/DEPENDENT_CODE dropped: they are the five items of MFI5, which is
+  # retained in their place. MFI5 and COMORB are only weakly correlated (rho 0.38),
+  # so both are kept as distinct constructs (frailty burden vs ASA fitness grade).
+  drop:        [SCI_yes_no, AMOUNT_OF_LEVELS_INJURED, N_CODE,
+                HT_CODE, CHF_CODE, COPD_CODE, DM_CODE, DEPENDENT_CODE]
+
+encoding:
+  # Must list every level Cleaner can emit, including cleaning.intentie_unknown:
+  # the encoder is set to handle_unknown="error", so an omission raises instead of
+  # silently folding that level into the reference category.
+  intentie_categories: [fall_high, fall_low, MVA, OVA, other, unknown, violence]
+  intentie_reference: fall_low
+
+explainability:
+  model_path: outputs/final_model.joblib
+  boot_coefs_path: outputs/validation/bootstrap_coefficients.npz
+  output_dir: outputs/explainability
+  top_n: 15                       # bar / beeswarm; waterfall fallback without a threshold
+  # Waterfall plots are drawn for the patients sitting at these percentiles of
+  # predicted risk, so the examples span the range the model actually produces.
+  waterfall_percentiles: [5, 50, 95]
+  # Pool every predictor contributing 5% or less of the patient's summed absolute
+  # contributions into one signed net bar. This threshold replaces the
+  # waterfall's top_n limit.
+  waterfall_group_threshold_pct: 5.0
+  # Overrides the default unit label in the coefficient table. Ordinal predictors
+  # default to "per grade", which reads wrong for one that counts things.
+  unit_labels:
+    NUMBER_OF_FRACTURES:   per fracture (top level 6+)
+  display_names:
+    LEEFTIJD_EXACT:        Age (years)
+    LEEFTIJD_EXACT_s1:     Age (spline, linear term)
+    LEEFTIJD_EXACT_s2:     Age (spline, curvature term)
+    BMI:                   BMI
+    ISS08:                 Injury Severity Score
+    NUMBER_OF_FRACTURES:   Number of fractures
+    Geslacht01:            Female sex
+    TBI_CT:                Traumatic brain injury (CT)
+    TYPE_A_INJURY:         AO type A fracture
+    TYPE_B_INJURY:         AO type B fracture
+    TYPE_C_INJURY:         AO type C fracture
+    TYPE_F_INJURY:         AO type F fracture
+    C:                     Cervical injury
+    T:                     Thoracic injury
+    L:                     Lumbar injury
+    S:                     Sacral injury
+    NEURO_NOT_EXAMINABLE:  Neurological exam not possible
+    COMORB:                Comorbidity (ASA grade)
+    ASIA:                  ASIA grade
+    MFI5:                  mFI-5 frailty index
+    # INTENTIE_cat labels the waterfall row the INTENTIE_* dummies collapse into;
+    # the per-dummy labels below are still used by the coefficient table and forest.
+    INTENTIE_cat:          Injury mechanism
+    INTENTIE_fall_high:    "Intent: high-energy fall"
+    INTENTIE_MVA:          "Intent: motor vehicle accident"
+    INTENTIE_OVA:          "Intent: other vehicle accident"
+    INTENTIE_other:        "Intent: other"
+    INTENTIE_unknown:      "Intent: not recorded"
+    INTENTIE_violence:     "Intent: violence"
+
+baseline_table:
+  output_dir: outputs/baseline
+  # Column labels for the outcome strata (target.event_col: 0 / 1).
+  outcome_labels:
+    0: Survived
+    1: Died
+  # Row order, clinically grouped rather than by variable type: patient, then
+  # mechanism and overall severity, then the spinal injury itself, then the
+  # neurological and comorbidity status. Must list every predictor Cleaner emits
+  # — the builder raises if the two sets differ, so a feature added to
+  # features.* cannot silently drop out of the table.
+  row_order: [LEEFTIJD_EXACT, BMI, Geslacht01, MFI5, INTENTIE_cat, ISS08,
+              TYPE_A_INJURY, TYPE_B_INJURY, TYPE_C_INJURY, TYPE_F_INJURY,
+              C, T, L, S, NUMBER_OF_FRACTURES, TBI_CT,
+              ASIA, NEURO_NOT_EXAMINABLE, COMORB]
+  # Row labels for predictors that explainability.display_names does not cover
+  # (that map is keyed by model feature names, which INTENTIE_cat is not — it is
+  # one-hot encoded into INTENTIE_* before the model sees it).
+  variable_labels:
+    INTENTIE_cat: Injury mechanism
+  # Cleaner pins ASIA to E (cleaning.neuro_not_examinable.fill_value) for patients
+  # whose neurology could not be examined. Counted as E here, those 118 patients
+  # (95 of them deaths) would make most deaths look neurologically intact, so the
+  # table moves them to this ASIA level instead. 0 is the source data's own
+  # "not determinable" code.
+  not_examinable_code: 0
+  # Level labels for the ordinal and categorical predictors, in the coding the
+  # model sees (i.e. after Cleaner: MFI5 capped at 3, INTENTIE collapsed into
+  # INTENTIE_cat), except ASIA, which also has not_examinable_code above.
+  level_labels:
+    COMORB:
+      1: "I - healthy"
+      2: "II - mild systemic disease"
+      3: "III - severe systemic disease"
+      4: "IV - severe disease, constant threat to life"
+      5: "V - moribund"
+    ASIA:
+      1: "A - complete"
+      2: "B - sensory incomplete"
+      3: "C - motor incomplete"
+      4: "D - motor incomplete"
+      5: "E - normal"
+      0: "Not examinable"
+    MFI5:
+      0: "0"
+      1: "1"
+      2: "2"
+      3: "3+"
+    # Same coding as the model: cleaning.ordinal_caps clips at 6, so the top level
+    # is 6+. 0 is a real level (consulted, no fracture classified), not missing.
+    NUMBER_OF_FRACTURES:
+      0: "0"
+      1: "1"
+      2: "2"
+      3: "3"
+      4: "4"
+      5: "5"
+      6: "6+"
+    INTENTIE_cat:
+      fall_low:  Low-energy fall
+      fall_high: High-energy fall
+      MVA:       Motor vehicle accident
+      OVA:       Other vehicle accident
+      violence:  Violence
+      other:     Other
+      unknown:   Not recorded
+
+models:
+  logistic_regression:
+    C: 1.0
+    l1_ratio: 0.5
+    max_iter: 5000
+    class_weight: null

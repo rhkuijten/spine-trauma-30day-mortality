@@ -1,0 +1,83 @@
+{
+  "INCLUSION": {
+    "0.0": "Exclusie",
+    "1.0": "Inclusie"
+  },
+  "COMORB": {
+    "1.0": "Normaal gezonde patient",
+    "2.0": "Patient met een lichte systemische aandoening, goed onder controle",
+    "3.0": "Patient met een ernstige systemische aandoening, die beperkt in normale activiteiten",
+    "4.0": "Patient met zeer ernstige systemische aandoening, die een constante bedreiging vormt voor het leven",
+    "5.0": "Stervende patiënt: overleving van meer dan 24 uur is onwaarschijnlijk, met of zonder ingreep",
+    "888.0": "Naar waarde gezocht maar niet gevonden",
+    "999.0": "Niet ingevuld en nog na te zoeken"
+  },
+  "INTENTIE": {
+    "1.0": "Verkeersongeval: gemotoriseerd voertuig (excl. motor/bromfiets)",
+    "2.0": "Verkeersongeval: ongeval motorfiets",
+    "3.0": "Verkeersongeval brommer/scooter/snorfiets",
+    "4.0": "Verkeersongeval: fiets",
+    "5.0": "Verkeersongeval: voetganger",
+    "6.0": "Verkeersongeval: anders",
+    "7.0": "Schietincident met geweer/pistool/wapen",
+    "8.0": "Steekincident met mes/zwaard/dolk/ander scherp object",
+    "9.0": "Geslagen met stomp object",
+    "10.0": "Laag energetische val (val op zelfde niveau)",
+    "11.0": "Hoog energetische val (val van hoger niveau)",
+    "12.0": "Explosie",
+    "13.0": "Thermisch (brand) ongeval",
+    "14.0": "Verdrinking",
+    "15.0": "Asfyxie",
+    "18.0": "Anders",
+    "888.0": "Naar waarde gezocht maar niet gevonden",
+    "999.0": "Niet ingevuld en nog na te zoeken"
+  },
+  "D30_Mortality": {
+    "0.0": "niet overleden",
+    "1.0": "overleden"
+  },
+  "ASIA": {
+    "0.0": "Niet te bepalen",
+    "1.0": "A = Complete",
+    "2.0": "B = Sensory incomplete",
+    "3.0": "C = Motor incomplete",
+    "4.0": "D = Motor incomplete",
+    "5.0": "E = Normal"
+  },
+  "C": {
+    "JA": "Cervicaal Letsel",
+    "NEE": "Geen Cervicaal letsel"
+  },
+  "T": {
+    "JA": "Thoracaal letsel",
+    "NEE": "Geen Thoracaal letsel"
+  },
+  "L": {
+    "JA": "Lumbaal letsel",
+    "NEE": "Geen Lumbaal letsel"
+  },
+  "S": {
+    "JA": "Sacraal letsel",
+    "NEE": "Geen sacraal letsel"
+  },
+  "TYPE_A_INJURY": {
+    "0.0": "Nee",
+    "1.0": "Ja"
+  },
+  "TYPE_B_INJURY": {
+    "0.0": "Nee",
+    "1.0": "Ja"
+  },
+  "TYPE_F_INJURY": {
+    "0.0": "Nee",
+    "1.0": "Ja"
+  },
+  "TYPE_C_INJURY": {
+    "0.0": "Nee",
+    "1.0": "Ja"
+  },
+  "TBI_CT": {
+    "0.0": "Geen intracraniele afwijkingen",
+    "1.0": "intracraniele afwijkingen"
+  }
+}
